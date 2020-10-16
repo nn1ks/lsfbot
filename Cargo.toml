@@ -1,0 +1,19 @@
+[package]
+name = "lsfbot"
+version = "0.1.0"
+authors = ["Niklas Sauter <niklas.sauter@gmx.de>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.33"
+chrono = "0.4.19"
+chrono-tz = "0.5.3"
+clap = "3.0.0-beta.2"
+derive_more = "0.99.11"
+fern = "0.6.0"
+log = "0.4.11"
+reqwest = { version = "0.10.8", default-features = false, features = ["rustls-tls", "blocking"] }
+scraper = "0.12.0"
+serde = { version = "1.0.117", features = ["derive"] }
+serenity = "0.8.7"
+toml = "0.5.7"
