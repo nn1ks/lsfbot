@@ -42,7 +42,7 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
                 return Ok(());
             }
         },
-        None => chrono_tz::Europe::Berlin.from_utc_date(&Utc::today().naive_utc()),
+        None => Utc::now().with_timezone(&chrono_tz::Europe::Berlin).date(),
     };
     let mut messages = module
         .iter()
