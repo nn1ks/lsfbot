@@ -13,7 +13,7 @@ pub fn fetch_module(cfg: &Config) -> Result<Vec<Modul>> {
         .build()
         .context("Failed to create HTTP client")?;
 
-    let mut module = Vec::new();
+    let mut module = Vec::<Modul>::new();
 
     for config::LinkData { lsf, .. } in cfg.links.to_vec() {
         let response = client
@@ -137,13 +137,32 @@ pub fn fetch_module(cfg: &Config) -> Result<Vec<Modul>> {
                     log::warn!("Found entry without any dates");
                 }
 
-                module.push(Modul {
-                    typ: modul_typ.clone(),
-                    gruppe,
-                    termine,
-                    raum,
-                    bemerkung,
-                });
+                match (
+                    &raum,
+                    module.iter_mut().find(|modul| {
+                        modul.termine == termine && modul.typ == modul_typ && modul.gruppe == gruppe
+                    }),
+                ) {
+                    (
+                        Some(raum),
+                        Some(Modul {
+                            raum: Some(modul_raum),
+                            ..
+                        }),
+                    ) => {
+                        modul_raum.push_str(" & ");
+                        modul_raum.push_str(raum);
+                    }
+                    _ => {
+                        module.push(Modul {
+                            typ: modul_typ.clone(),
+                            gruppe,
+                            termine,
+                            raum,
+                            bemerkung,
+                        });
+                    }
+                };
             }
         }
         thread::sleep(Duration::from_secs(2));

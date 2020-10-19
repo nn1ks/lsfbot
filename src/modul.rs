@@ -43,7 +43,7 @@ impl<'m> MessageData<'m> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Modul {
     pub typ: ModulTyp,
     pub gruppe: Option<ModulGruppe>,
@@ -94,7 +94,7 @@ impl Modul {
     }
 }
 
-#[derive(Clone, Debug, Display)]
+#[derive(Clone, Debug, Display, Eq, PartialEq)]
 pub enum ModulTyp {
     #[display(fmt = "Mathematik 1")]
     Mathematik1,
@@ -118,7 +118,7 @@ impl ModulTyp {
     }
 }
 
-#[derive(Debug, Display)]
+#[derive(Debug, Display, Eq, PartialEq)]
 pub enum ModulGruppe {
     #[display(fmt = "Gruppe 1")]
     Gruppe1,
@@ -142,7 +142,7 @@ impl ModulGruppe {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ModulTermin {
     pub anfang: DateTime<Tz>,
     pub ende: DateTime<Tz>,
