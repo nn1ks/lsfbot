@@ -34,17 +34,15 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     let config = map.get::<Config>().unwrap();
     let data = map.get::<Data>().unwrap();
     let module = &data.lock().unwrap().module;
-    let date = if args.is_empty() {
-        chrono_tz::Europe::Berlin.from_utc_date(&Utc::today().naive_utc())
-    } else {
-        let date = match args.parse::<NaiveDate>() {
-            Ok(v) => v,
+    let date = match args.current() {
+        Some(arg) => match NaiveDate::parse_from_str(arg, "%d.%m.%Y") {
+            Ok(v) => chrono_tz::Europe::Berlin.from_local_date(&v).unwrap(),
             Err(_) => {
                 msg.reply(&ctx.http, "Error: Invalid date format")?;
                 return Ok(());
             }
-        };
-        chrono_tz::Europe::Berlin.from_local_date(&date).unwrap()
+        },
+        None => chrono_tz::Europe::Berlin.from_utc_date(&Utc::today().naive_utc()),
     };
     let mut messages = module
         .iter()
