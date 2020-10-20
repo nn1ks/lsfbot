@@ -47,6 +47,20 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     let mut messages = module
         .iter()
         .flat_map(|modul| modul.messages(|termin| date == termin.anfang.date()))
+        .filter(|message| {
+            let author_has_role = |role_id: u64| {
+                msg.author
+                    .has_role(&ctx.http, config.discord.guild_id, role_id)
+                    .unwrap()
+            };
+            match message.0.gruppe {
+                Some(ModulGruppe::Gruppe1) => author_has_role(config.discord.gruppe_1.role_id),
+                Some(ModulGruppe::Gruppe2) => author_has_role(config.discord.gruppe_2.role_id),
+                Some(ModulGruppe::Gruppe3) => author_has_role(config.discord.gruppe_3.role_id),
+                Some(ModulGruppe::Gruppe4) => author_has_role(config.discord.gruppe_4.role_id),
+                None => true,
+            }
+        })
         .collect::<Vec<_>>();
     messages.sort_by_key(|m| m.1.anfang);
     if messages.is_empty() {
