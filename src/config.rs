@@ -14,8 +14,16 @@ impl TypeMapKey for Config {
 
 #[derive(Deserialize)]
 pub struct Discord {
-    pub channel_id: u64,
     pub bot_token: String,
+    pub gruppe_1: Group,
+    pub gruppe_2: Group,
+    pub gruppe_3: Group,
+    pub gruppe_4: Group,
+}
+
+#[derive(Deserialize)]
+pub struct Group {
+    pub channel_id: u64,
 }
 
 #[derive(Deserialize)]

@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result};
 use chrono::{NaiveDate, TimeZone, Utc};
 use clap::Clap;
 use config::Config;
-use modul::Modul;
+use modul::{Modul, ModulGruppe};
 use serenity::client::{Client, Context, EventHandler};
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{Args, CommandResult, StandardFramework};
@@ -136,21 +136,50 @@ fn main() -> Result<()> {
 
     let reminder_join_handle = thread::spawn(move || {
         log::info!("Checking for reminders");
+
+        let send_message = |message: &modul::MessageData, channel_id| match ChannelId(channel_id)
+            .send_message(&http_client, |m| message.to_create_message(m, &config))
+        {
+            Ok(_) => log::info!("Sent reminder message to channel `{}`", channel_id),
+            Err(e) => log::error!("Failed to send reminder message: {}", e),
+        };
+
         loop {
-            for modul in &data.lock().unwrap().module {
-                let messages = modul.messages(|termin| {
-                    let duration = termin.anfang.signed_duration_since(Utc::now());
-                    duration.num_minutes() > 25 && duration.num_minutes() < 30
-                });
-                for message in messages {
-                    match ChannelId(config.discord.channel_id)
-                        .send_message(&http_client, |m| message.to_create_message(m, &config))
-                    {
-                        Ok(_) => log::info!("Sent reminder message"),
-                        Err(e) => log::error!("Failed to send reminder message: {}", e),
+            let data_lock = data.lock().unwrap();
+            let module = &data_lock.module;
+            let mut messages = module
+                .iter()
+                .flat_map(|modul| {
+                    modul.messages(|termin| {
+                        let duration = termin.anfang.signed_duration_since(Utc::now());
+                        duration.num_minutes() > 25 && duration.num_minutes() < 30
+                    })
+                })
+                .collect::<Vec<_>>();
+            messages.sort_by_key(|m| m.1.anfang);
+            for message in messages {
+                match message.0.gruppe {
+                    Some(ModulGruppe::Gruppe1) => {
+                        send_message(&message, config.discord.gruppe_1.channel_id)
+                    }
+                    Some(ModulGruppe::Gruppe2) => {
+                        send_message(&message, config.discord.gruppe_2.channel_id)
+                    }
+                    Some(ModulGruppe::Gruppe3) => {
+                        send_message(&message, config.discord.gruppe_3.channel_id)
+                    }
+                    Some(ModulGruppe::Gruppe4) => {
+                        send_message(&message, config.discord.gruppe_4.channel_id)
+                    }
+                    None => {
+                        send_message(&message, config.discord.gruppe_1.channel_id);
+                        send_message(&message, config.discord.gruppe_2.channel_id);
+                        send_message(&message, config.discord.gruppe_3.channel_id);
+                        send_message(&message, config.discord.gruppe_4.channel_id);
                     }
                 }
             }
+            drop(data_lock);
             thread::sleep(Duration::from_secs(300));
         }
     });
