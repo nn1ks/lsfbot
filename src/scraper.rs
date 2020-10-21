@@ -97,7 +97,7 @@ pub fn fetch_module(cfg: &Config) -> Result<Vec<Modul>> {
                     .inner_html();
                 let zeit = zeit.replace("&nbsp;", " ");
                 let mut split = zeit.trim().split(" bis ");
-                let zeit_anfang = NaiveTime::parse_from_str(
+                let zeit_beginn = NaiveTime::parse_from_str(
                     split.next().context("Failed to parse time")?,
                     "%H:%M",
                 )
@@ -124,8 +124,8 @@ pub fn fetch_module(cfg: &Config) -> Result<Vec<Modul>> {
                     )
                     .context("Failed to parse date")?;
                     let termin = ModulTermin {
-                        anfang: chrono_tz::Europe::Berlin
-                            .from_local_datetime(&NaiveDateTime::new(date, zeit_anfang))
+                        beginn: chrono_tz::Europe::Berlin
+                            .from_local_datetime(&NaiveDateTime::new(date, zeit_beginn))
                             .unwrap(),
                         ende: chrono_tz::Europe::Berlin
                             .from_local_datetime(&NaiveDateTime::new(date, zeit_ende))

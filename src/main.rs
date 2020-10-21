@@ -46,14 +46,14 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     };
     let mut messages = module
         .iter()
-        .flat_map(|modul| modul.messages(|termin| date == termin.anfang.date()))
+        .flat_map(|modul| modul.messages(|termin| date == termin.beginn.date()))
         .filter(|message| {
             let author_has_role = |role_id: u64| {
                 msg.author
                     .has_role(&ctx.http, config.discord.guild_id, role_id)
                     .unwrap()
             };
-            match message.0.gruppe {
+            match message.modul.gruppe {
                 Some(ModulGruppe::Gruppe1) => author_has_role(config.discord.gruppe_1.role_id),
                 Some(ModulGruppe::Gruppe2) => author_has_role(config.discord.gruppe_2.role_id),
                 Some(ModulGruppe::Gruppe3) => author_has_role(config.discord.gruppe_3.role_id),
@@ -62,7 +62,7 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
             }
         })
         .collect::<Vec<_>>();
-    messages.sort_by_key(|m| m.1.anfang);
+    messages.sort_by_key(|m| m.modul_termin.beginn);
     if messages.is_empty() {
         msg.channel_id.send_message(&ctx.http, |m| {
             m.content(format!(
@@ -151,12 +151,16 @@ fn main() -> Result<()> {
     let reminder_join_handle = thread::spawn(move || {
         log::info!("Checking for reminders");
 
-        let send_message = |message: &modul::MessageData, channel_id| match ChannelId(channel_id)
-            .send_message(&http_client, |m| message.to_create_message(m, &config))
-        {
-            Ok(_) => log::info!("Sent reminder message to channel `{}`", channel_id),
-            Err(e) => log::error!("Failed to send reminder message: {}", e),
-        };
+        let send_message =
+            |message: &modul::MessageData, group: &config::Group| match ChannelId(group.channel_id)
+                .send_message(&http_client, |m| {
+                    message
+                        .to_create_message(m, &config)
+                        .content(format!("<@&{}>", group.role_id))
+                }) {
+                Ok(_) => log::info!("Sent reminder message to channel `{}`", group.channel_id),
+                Err(e) => log::error!("Failed to send reminder message: {}", e),
+            };
 
         loop {
             let data_lock = data.lock().unwrap();
@@ -165,31 +169,23 @@ fn main() -> Result<()> {
                 .iter()
                 .flat_map(|modul| {
                     modul.messages(|termin| {
-                        let duration = termin.anfang.signed_duration_since(Utc::now());
+                        let duration = termin.beginn.signed_duration_since(Utc::now());
                         duration.num_minutes() > 25 && duration.num_minutes() < 30
                     })
                 })
                 .collect::<Vec<_>>();
-            messages.sort_by_key(|m| m.1.anfang);
+            messages.sort_by_key(|m| m.modul_termin.beginn);
             for message in messages {
-                match message.0.gruppe {
-                    Some(ModulGruppe::Gruppe1) => {
-                        send_message(&message, config.discord.gruppe_1.channel_id)
-                    }
-                    Some(ModulGruppe::Gruppe2) => {
-                        send_message(&message, config.discord.gruppe_2.channel_id)
-                    }
-                    Some(ModulGruppe::Gruppe3) => {
-                        send_message(&message, config.discord.gruppe_3.channel_id)
-                    }
-                    Some(ModulGruppe::Gruppe4) => {
-                        send_message(&message, config.discord.gruppe_4.channel_id)
-                    }
+                match message.modul.gruppe {
+                    Some(ModulGruppe::Gruppe1) => send_message(&message, &config.discord.gruppe_1),
+                    Some(ModulGruppe::Gruppe2) => send_message(&message, &config.discord.gruppe_2),
+                    Some(ModulGruppe::Gruppe3) => send_message(&message, &config.discord.gruppe_3),
+                    Some(ModulGruppe::Gruppe4) => send_message(&message, &config.discord.gruppe_4),
                     None => {
-                        send_message(&message, config.discord.gruppe_1.channel_id);
-                        send_message(&message, config.discord.gruppe_2.channel_id);
-                        send_message(&message, config.discord.gruppe_3.channel_id);
-                        send_message(&message, config.discord.gruppe_4.channel_id);
+                        send_message(&message, &config.discord.gruppe_1);
+                        send_message(&message, &config.discord.gruppe_2);
+                        send_message(&message, &config.discord.gruppe_3);
+                        send_message(&message, &config.discord.gruppe_4);
                     }
                 }
             }

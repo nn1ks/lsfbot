@@ -5,37 +5,42 @@ use chrono_tz::Tz;
 use derive_more::Display;
 use serenity::{builder::CreateMessage, utils::Color};
 
-pub struct MessageData<'m>(pub &'m Modul, pub &'m ModulTermin);
+pub struct MessageData<'m> {
+    pub modul: &'m Modul,
+    pub modul_termin: &'m ModulTermin,
+}
 
-impl<'m> MessageData<'m> {
+impl MessageData<'_> {
     pub fn to_create_message<'a, 'b>(
         &self,
         msg: &'b mut CreateMessage<'a>,
         cfg: &Config,
     ) -> &'b mut CreateMessage<'a> {
         msg.embed(|mut embed| {
-            embed = embed.title(self.0.title()).color(self.0.embed_color());
-            if let Some(online_link) = self.0.online_link(cfg) {
+            embed = embed
+                .title(self.modul.title())
+                .color(self.modul.embed_color())
+                .description(format!(
+                    "{} {} - {}",
+                    match self.modul_termin.beginn.weekday() {
+                        Weekday::Mon => "Montag",
+                        Weekday::Tue => "Dienstag",
+                        Weekday::Wed => "Mittwoch",
+                        Weekday::Thu => "Donnerstag",
+                        Weekday::Fri => "Freitag",
+                        Weekday::Sat => "Samstag",
+                        Weekday::Sun => "Sonntag",
+                    },
+                    self.modul_termin.beginn.format("%H:%M"),
+                    self.modul_termin.ende.format("%H:%M")
+                ));
+            if let Some(online_link) = self.modul.online_link(cfg) {
                 embed = embed.field("Online", online_link, false);
             }
-            embed = embed.description(format!(
-                "{} {} - {}",
-                match self.1.anfang.weekday() {
-                    Weekday::Mon => "Montag",
-                    Weekday::Tue => "Dienstag",
-                    Weekday::Wed => "Mittwoch",
-                    Weekday::Thu => "Donnerstag",
-                    Weekday::Fri => "Freitag",
-                    Weekday::Sat => "Samstag",
-                    Weekday::Sun => "Sonntag",
-                },
-                self.1.anfang.format("%H:%M"),
-                self.1.ende.format("%H:%M")
-            ));
-            if let Some(raum) = &self.0.raum {
+            if let Some(raum) = &self.modul.raum {
                 embed = embed.field("Raum", raum, false);
             }
-            if let Some(bemerkung) = &self.0.bemerkung {
+            if let Some(bemerkung) = &self.modul.bemerkung {
                 embed = embed.field("Bemerkung", bemerkung, false);
             }
             embed
@@ -60,18 +65,21 @@ impl Modul {
         self.termine
             .iter()
             .filter(|termin| filter(termin))
-            .map(|termin| MessageData(self, termin))
+            .map(|termin| MessageData {
+                modul: self,
+                modul_termin: termin,
+            })
             .collect()
     }
 
-    pub fn title(&self) -> String {
+    fn title(&self) -> String {
         match &self.gruppe {
             Some(gruppe) => format!("{} ({})", self.typ, gruppe),
             None => self.typ.to_string(),
         }
     }
 
-    pub fn online_link(&self, cfg: &Config) -> Option<String> {
+    fn online_link(&self, cfg: &Config) -> Option<String> {
         let link_data = match self.typ {
             ModulTyp::Mathematik1 => &cfg.links.mathematik1,
             ModulTyp::Programmiertechnik1 => &cfg.links.programmiertechnik1,
@@ -84,7 +92,7 @@ impl Modul {
         }
     }
 
-    pub fn embed_color(&self) -> Color {
+    fn embed_color(&self) -> Color {
         match self.typ {
             ModulTyp::Mathematik1 => Color::BLUE,
             ModulTyp::Programmiertechnik1 => Color::ORANGE,
@@ -144,6 +152,6 @@ impl ModulGruppe {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ModulTermin {
-    pub anfang: DateTime<Tz>,
+    pub beginn: DateTime<Tz>,
     pub ende: DateTime<Tz>,
 }
