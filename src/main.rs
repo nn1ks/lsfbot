@@ -90,6 +90,7 @@ fn update(ctx: &mut Context, msg: &Message) -> CommandResult {
             return Ok(());
         }
     };
+    drop(map);
     let mut map = ctx.data.write();
     let data = map.get_mut::<Data>().unwrap();
     data.lock().unwrap().module = module;
