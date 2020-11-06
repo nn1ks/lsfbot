@@ -45,42 +45,57 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     let config = map.get::<Config>().unwrap();
     let data = map.get::<Data>().unwrap();
     let module = &data.lock().unwrap().module;
-    let date = match args.current() {
+    let (mut date, strict_list) = match args.current() {
         Some(arg) => match NaiveDate::parse_from_str(arg, "%d.%m.%Y") {
-            Ok(v) => chrono_tz::Europe::Berlin.from_local_date(&v).unwrap(),
+            Ok(v) => (chrono_tz::Europe::Berlin.from_local_date(&v).unwrap(), true),
             Err(_) => {
                 msg.reply(&ctx.http, "Error: Invalid date format")?;
                 return Ok(());
             }
         },
-        None => Utc::now().with_timezone(&chrono_tz::Europe::Berlin).date(),
+        None => (
+            Utc::now().with_timezone(&chrono_tz::Europe::Berlin).date(),
+            false,
+        ),
     };
-    let mut messages = module
-        .iter()
-        .flat_map(|modul| modul.messages(|termin| date == termin.beginn.date()))
-        .filter(|message| {
-            let author_has_role = |role_id: u64| {
-                msg.author
-                    .has_role(&ctx.http, config.discord.guild_id, role_id)
-                    .unwrap()
-            };
-            match message.modul.gruppe {
-                Some(ModulGruppe::Gruppe1) => author_has_role(config.discord.gruppe_1.role_id),
-                Some(ModulGruppe::Gruppe2) => author_has_role(config.discord.gruppe_2.role_id),
-                Some(ModulGruppe::Gruppe3) => author_has_role(config.discord.gruppe_3.role_id),
-                Some(ModulGruppe::Gruppe4) => author_has_role(config.discord.gruppe_4.role_id),
-                None => true,
-            }
-        })
-        .collect::<Vec<_>>();
+    let mut messages = Vec::new();
+    let mut i = 0;
+    loop {
+        let v = module
+            .iter()
+            .flat_map(|modul| modul.messages(|termin| date == termin.beginn.date()))
+            .filter(|message| {
+                let author_has_role = |role_id: u64| {
+                    msg.author
+                        .has_role(&ctx.http, config.discord.guild_id, role_id)
+                        .unwrap()
+                };
+                match message.modul.gruppe {
+                    Some(ModulGruppe::Gruppe1) => author_has_role(config.discord.gruppe_1.role_id),
+                    Some(ModulGruppe::Gruppe2) => author_has_role(config.discord.gruppe_2.role_id),
+                    Some(ModulGruppe::Gruppe3) => author_has_role(config.discord.gruppe_3.role_id),
+                    Some(ModulGruppe::Gruppe4) => author_has_role(config.discord.gruppe_4.role_id),
+                    None => true,
+                }
+            });
+        messages.extend(v);
+        if !messages.is_empty() || strict_list || i >= 7 {
+            break;
+        } else {
+            date = date + chrono::Duration::days(1);
+        }
+        i += 1;
+    }
     messages.sort_by_key(|m| m.modul_termin.beginn);
     if messages.is_empty() {
-        msg.channel_id.send_message(&ctx.http, |m| {
-            m.content(format!(
-                "Keine Lehrveranstaltungen am {}",
-                date.format("%d.%m.%Y")
-            ))
-        })?;
+        if strict_list {
+            msg.channel_id.send_message(&ctx.http, |m| {
+                m.content(format!(
+                    "Keine Lehrveranstaltungen am {}",
+                    date.format("%d.%m.%Y")
+                ))
+            })?;
+        }
     } else {
         for message in messages {
             msg.channel_id
