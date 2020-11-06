@@ -254,14 +254,19 @@ fn main() -> Result<()> {
 
     let args = arg::Args::parse();
 
-    let config_data = fs::read_to_string(args.config).context("Failed to read config file")?;
+    let config_data = fs::read_to_string(&args.config).context("Failed to read config file")?;
     let config: Config =
         toml::from_str(&config_data).context("Failed to deserialize config file")?;
     let config = Arc::new(config);
 
+    let users_file_path = if config.users.file.is_absolute() {
+        config.users.file.clone()
+    } else {
+        args.config.parent().unwrap().join(&config.users.file)
+    };
     let data = Arc::new(Mutex::new(Data {
         module: Vec::new(),
-        users: Users::new(config.users.file.clone()).context("Failed to read users")?,
+        users: Users::new(users_file_path).context("Failed to read users file")?,
     }));
 
     let mut client = Client::new(&config.discord.bot_token, Handler).unwrap();
