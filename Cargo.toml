@@ -5,7 +5,7 @@ authors = ["Niklas Sauter <niklas.sauter@gmx.de>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.33"
+anyhow = "1.0.34"
 chrono = "0.4.19"
 chrono-humanize = "0.1.1"
 chrono-tz = "0.5.3"
