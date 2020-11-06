@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Datelike, Weekday};
 use chrono_tz::Tz;
 use derive_more::Display;
+use serde::{Deserialize, Serialize};
 use serenity::{builder::CreateMessage, utils::Color};
 
 pub struct MessageData<'m> {
@@ -126,7 +127,7 @@ impl ModulTyp {
     }
 }
 
-#[derive(Debug, Display, Eq, PartialEq)]
+#[derive(Clone, Debug, Display, Eq, PartialEq, Deserialize, Serialize)]
 pub enum ModulGruppe {
     #[display(fmt = "Gruppe 1")]
     Gruppe1,

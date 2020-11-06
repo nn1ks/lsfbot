@@ -1,10 +1,11 @@
 use serde::Deserialize;
 use serenity::prelude::TypeMapKey;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Deserialize)]
 pub struct Config {
     pub discord: Discord,
+    pub users: Users,
     pub links: Links,
 }
 
@@ -26,6 +27,11 @@ pub struct Discord {
 pub struct Group {
     pub channel_id: u64,
     pub role_id: u64,
+}
+
+#[derive(Deserialize)]
+pub struct Users {
+    pub file: PathBuf,
 }
 
 #[derive(Deserialize)]
