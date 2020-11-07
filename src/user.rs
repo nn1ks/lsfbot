@@ -53,8 +53,12 @@ impl Users {
         Ok(())
     }
 
-    pub fn get(&self) -> &[User] {
+    pub fn get_all(&self) -> &[User] {
         &self.config.user
+    }
+
+    pub fn get(&self, user_id: UserId) -> Option<&User> {
+        self.config.user.iter().find(|v| v.id == user_id)
     }
 
     fn write(&mut self) -> Result<()> {

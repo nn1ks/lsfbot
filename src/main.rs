@@ -36,7 +36,7 @@ struct General;
 
 #[group]
 #[prefixes("dm")]
-#[commands(enable, disable, remove, set)]
+#[commands(enable, disable, remove, set, get)]
 struct DirectMessages;
 
 #[command]
@@ -210,6 +210,38 @@ fn set(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     Ok(())
 }
 
+/// Displays the configuration
+#[command]
+fn get(ctx: &mut Context, msg: &Message) -> CommandResult {
+    let map = ctx.data.read();
+    let data = map.get::<Data>().unwrap();
+    match data.lock().unwrap().users.get(msg.author.id) {
+        Some(user) => {
+            let send_before_fmt = match &user.send_before {
+                Some(v) => format!("{}min", v.minutes),
+                None => "off".to_owned(),
+            };
+            let send_after_previous_fmt = if user.send_after_previous {
+                "on"
+            } else {
+                "off"
+            };
+            msg.channel_id.send_message(&ctx.http, |m| {
+                m.embed(|e| {
+                    e.title("Configuration")
+                        .field("enabled", user.enabled, false)
+                        .field("send-before", send_before_fmt, false)
+                        .field("send-after-previous", send_after_previous_fmt, false)
+                })
+            })?;
+        }
+        None => {
+            msg.reply(&ctx.http, "Error: User not found")?;
+        }
+    };
+    Ok(())
+}
+
 #[command]
 fn update(ctx: &mut Context, msg: &Message) -> CommandResult {
     let map = ctx.data.read();
@@ -345,7 +377,7 @@ fn main() -> Result<()> {
                 }
             }
 
-            for user in data_lock.users.get() {
+            for user in data_lock.users.get_all() {
                 if !user.enabled {
                     continue;
                 }
