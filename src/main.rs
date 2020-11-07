@@ -3,7 +3,7 @@ use chrono::{NaiveDate, TimeZone, Utc};
 use chrono_humanize::HumanTime;
 use clap::Clap;
 use config::Config;
-use modul::{Modul, ModulGruppe};
+use modul::{Modul, ModulGruppe, ModulTermin};
 use serenity::client::{Client, Context, EventHandler};
 use serenity::framework::standard::macros::{command, group, help};
 use serenity::framework::standard::{
@@ -45,25 +45,11 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     let config = map.get::<Config>().unwrap();
     let data = map.get::<Data>().unwrap();
     let module = &data.lock().unwrap().module;
-    let (mut date, strict_list) = match args.current() {
-        Some(arg) => match NaiveDate::parse_from_str(arg, "%d.%m.%Y") {
-            Ok(v) => (chrono_tz::Europe::Berlin.from_local_date(&v).unwrap(), true),
-            Err(_) => {
-                msg.reply(&ctx.http, "Error: Invalid date format")?;
-                return Ok(());
-            }
-        },
-        None => (
-            Utc::now().with_timezone(&chrono_tz::Europe::Berlin).date(),
-            false,
-        ),
-    };
-    let mut messages = Vec::new();
-    let mut i = 0;
-    loop {
-        let v = module
+
+    let get_messages = |filter: Box<dyn Fn(&ModulTermin) -> bool>| {
+        module
             .iter()
-            .flat_map(|modul| modul.messages(|termin| date == termin.beginn.date()))
+            .flat_map(|modul| modul.messages(|termin| filter(termin)))
             .filter(|message| {
                 let author_has_role = |role_id: u64| {
                     msg.author
@@ -77,30 +63,52 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
                     Some(ModulGruppe::Gruppe4) => author_has_role(config.discord.gruppe_4.role_id),
                     None => true,
                 }
-            });
-        messages.extend(v);
-        if !messages.is_empty() || strict_list || i >= 7 {
-            break;
-        } else {
-            date = date + chrono::Duration::days(1);
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let mut messages = match args.current() {
+        Some(arg) => match NaiveDate::parse_from_str(arg, "%d.%m.%Y") {
+            Ok(v) => {
+                let date = chrono_tz::Europe::Berlin.from_local_date(&v).unwrap();
+                let messages = get_messages(Box::new(|termin| termin.beginn.date() == date));
+                if messages.is_empty() {
+                    msg.channel_id.send_message(&ctx.http, |m| {
+                        m.content(format!(
+                            "Keine Lehrveranstaltungen am {}",
+                            date.format("%d.%m.%Y")
+                        ))
+                    })?;
+                    return Ok(());
+                }
+                messages
+            }
+            Err(_) => {
+                msg.reply(&ctx.http, "Error: Invalid date format")?;
+                return Ok(());
+            }
+        },
+        None => {
+            let mut date = Utc::now().date();
+            let mut messages = Vec::new();
+            for _ in 0..7 {
+                let date2 = date;
+                messages.extend(get_messages(Box::new(move |termin| {
+                    termin.beginn.date() == date2 && termin.beginn > Utc::now()
+                })));
+                if !messages.is_empty() {
+                    break;
+                }
+                date = date + chrono::Duration::days(1);
+            }
+            messages
         }
-        i += 1;
-    }
+    };
+
     messages.sort_by_key(|m| m.modul_termin.beginn);
-    if messages.is_empty() {
-        if strict_list {
-            msg.channel_id.send_message(&ctx.http, |m| {
-                m.content(format!(
-                    "Keine Lehrveranstaltungen am {}",
-                    date.format("%d.%m.%Y")
-                ))
-            })?;
-        }
-    } else {
-        for message in messages {
-            msg.channel_id
-                .send_message(&ctx.http, |m| message.to_create_message(m, &config))?;
-        }
+    for message in messages {
+        msg.channel_id
+            .send_message(&ctx.http, |m| message.to_create_message(m, &config))?;
     }
     Ok(())
 }
