@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Deserialize, Serialize)]
 struct Config {
+    #[serde(default)]
     user: Vec<User>,
 }
 
