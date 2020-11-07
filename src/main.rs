@@ -116,16 +116,9 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
 /// Enables direct messages
 #[command]
 fn enable(ctx: &mut Context, msg: &Message) -> CommandResult {
-    let map = ctx.data.read();
-    let config = map.get::<Config>().unwrap().clone();
-    drop(map);
     let mut map = ctx.data.write();
     let data = map.get_mut::<Data>().unwrap();
-    data.lock()
-        .unwrap()
-        .users
-        .enable_or_add(msg.author.id, &ctx.http, &config)
-        .unwrap();
+    data.lock().unwrap().users.enable(msg.author.id).unwrap();
     msg.reply(&ctx.http, "Enabled direct messages")?;
     Ok(())
 }
@@ -304,12 +297,18 @@ fn main() -> Result<()> {
     } else {
         args.config.parent().unwrap().join(&config.users.file)
     };
-    let data = Arc::new(Mutex::new(Data {
-        module: Vec::new(),
-        users: Users::new(users_file_path).context("Failed to read users file")?,
-    }));
 
     let mut client = Client::new(&config.discord.bot_token, Handler).unwrap();
+
+    let data = Arc::new(Mutex::new(Data {
+        module: Vec::new(),
+        users: Users::new(
+            users_file_path,
+            Arc::clone(&config),
+            Arc::clone(&client.cache_and_http),
+        )
+        .context("Failed to read users file")?,
+    }));
 
     let http_client = Arc::clone(&client.cache_and_http.http);
     let bot_id = http_client.get_current_user().unwrap().id;

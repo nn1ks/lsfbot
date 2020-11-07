@@ -1,10 +1,10 @@
 use crate::modul::ModulGruppe;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serenity::{http::client::Http, model::id::UserId};
-use std::fs::OpenOptions;
+use serenity::{model::id::UserId, CacheAndHttp};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::{fs::OpenOptions, sync::Arc};
 
 #[derive(Deserialize, Serialize)]
 struct Config {
@@ -38,111 +38,128 @@ pub struct User {
 
 pub struct Users {
     file_path: PathBuf,
-    config: Config,
+    users_config: Config,
+    app_config: Arc<crate::Config>,
+    cache_and_http: Arc<CacheAndHttp>,
 }
 
 impl Users {
-    pub fn new(file_path: PathBuf) -> Result<Self> {
+    pub fn new(
+        file_path: PathBuf,
+        app_config: Arc<crate::Config>,
+        cache_and_http: Arc<CacheAndHttp>,
+    ) -> Result<Self> {
         Ok(Self {
-            config: Config::new(&file_path)?,
+            users_config: Config::new(&file_path)?,
             file_path,
+            app_config,
+            cache_and_http,
         })
     }
 
     pub fn refresh(&mut self) -> Result<()> {
-        self.config = Config::new(&self.file_path)?;
+        self.users_config = Config::new(&self.file_path)?;
         Ok(())
     }
 
     pub fn get_all(&self) -> &[User] {
-        &self.config.user
+        &self.users_config.user
     }
 
     pub fn get(&self, user_id: UserId) -> Option<&User> {
-        self.config.user.iter().find(|v| v.id == user_id)
+        self.users_config.user.iter().find(|v| v.id == user_id)
     }
 
     fn write(&mut self) -> Result<()> {
         let mut file = OpenOptions::new().write(true).open(&self.file_path)?;
-        let string = toml::to_string_pretty(&self.config)?;
+        let string = toml::to_string_pretty(&self.users_config)?;
         file.write_all(string.as_bytes())?;
         Ok(())
     }
 
-    pub fn enable_or_add(
-        &mut self,
-        user_id: UserId,
-        http: &Http,
-        config: &crate::Config,
-    ) -> Result<()> {
-        match self.config.user.iter_mut().find(|user| user.id == user_id) {
-            Some(v) => v.enabled = true,
-            None => {
-                let user = user_id.to_user(http)?;
-                let gruppe = if user.has_role(
-                    http,
-                    config.discord.guild_id,
-                    config.discord.gruppe_1.role_id,
-                )? {
-                    Some(ModulGruppe::Gruppe1)
-                } else if user.has_role(
-                    http,
-                    config.discord.guild_id,
-                    config.discord.gruppe_2.role_id,
-                )? {
-                    Some(ModulGruppe::Gruppe2)
-                } else if user.has_role(
-                    http,
-                    config.discord.guild_id,
-                    config.discord.gruppe_3.role_id,
-                )? {
-                    Some(ModulGruppe::Gruppe3)
-                } else if user.has_role(
-                    http,
-                    config.discord.guild_id,
-                    config.discord.gruppe_4.role_id,
-                )? {
-                    Some(ModulGruppe::Gruppe4)
-                } else {
-                    None
-                };
-                self.config.user.push(User {
-                    id: user_id,
-                    gruppe,
-                    enabled: true,
-                    send_before: Some(Duration { minutes: 30 }),
-                    send_after_previous: false,
-                })
-            }
+    fn get_mut_or_add(&mut self, user_id: UserId) -> Result<&mut User> {
+        if let Some(i) = self
+            .users_config
+            .user
+            .iter()
+            .position(|user| user.id == user_id)
+        {
+            return Ok(&mut self.users_config.user[i]);
+        }
+        let user = user_id.to_user(&self.cache_and_http)?;
+        let user_has_role = |role_id: u64| {
+            user.has_role(
+                &self.cache_and_http,
+                self.app_config.discord.guild_id,
+                role_id,
+            )
         };
+        let gruppe = if user_has_role(self.app_config.discord.gruppe_1.role_id)? {
+            Some(ModulGruppe::Gruppe1)
+        } else if user_has_role(self.app_config.discord.gruppe_2.role_id)? {
+            Some(ModulGruppe::Gruppe2)
+        } else if user_has_role(self.app_config.discord.gruppe_3.role_id)? {
+            Some(ModulGruppe::Gruppe3)
+        } else if user_has_role(self.app_config.discord.gruppe_4.role_id)? {
+            Some(ModulGruppe::Gruppe4)
+        } else {
+            None
+        };
+        let users = &mut self.users_config.user;
+        users.push(User {
+            id: user_id,
+            gruppe,
+            enabled: false,
+            send_before: Some(Duration { minutes: 30 }),
+            send_after_previous: false,
+        });
+        Ok(self
+            .users_config
+            .user
+            .iter_mut()
+            .find(|user| user.id == user_id)
+            .unwrap())
+    }
+
+    pub fn enable(&mut self, user_id: UserId) -> Result<()> {
+        let user = self.get_mut_or_add(user_id)?;
+        user.enabled = true;
         self.write()
     }
 
     pub fn disable(&mut self, user_id: UserId) -> Result<()> {
-        if let Some(v) = self.config.user.iter_mut().find(|user| user.id == user_id) {
+        if let Some(v) = self
+            .users_config
+            .user
+            .iter_mut()
+            .find(|user| user.id == user_id)
+        {
             v.enabled = false;
         }
         self.write()
     }
 
     pub fn remove(&mut self, user_id: UserId) -> Result<()> {
-        if let Some(i) = self.config.user.iter().position(|user| user.id == user_id) {
-            self.config.user.remove(i);
+        if let Some(i) = self
+            .users_config
+            .user
+            .iter()
+            .position(|user| user.id == user_id)
+        {
+            self.users_config.user.remove(i);
         }
         self.write()
     }
 
     pub fn set_send_before(&mut self, user_id: UserId, value: Option<Duration>) -> Result<()> {
-        if let Some(v) = self.config.user.iter_mut().find(|user| user.id == user_id) {
-            v.send_before = value;
-        }
+        let user = self.get_mut_or_add(user_id)?;
+        user.send_before = value;
         self.write()
     }
 
     pub fn set_send_after(&mut self, user_id: UserId, value: bool) -> Result<()> {
-        if let Some(v) = self.config.user.iter_mut().find(|user| user.id == user_id) {
-            v.send_after_previous = value;
-        }
+        let user = self.get_mut_or_add(user_id)?;
+        user.send_after_previous = value;
         self.write()
     }
 }
