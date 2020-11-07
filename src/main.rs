@@ -118,8 +118,10 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
 fn enable(ctx: &mut Context, msg: &Message) -> CommandResult {
     let mut map = ctx.data.write();
     let data = map.get_mut::<Data>().unwrap();
-    data.lock().unwrap().users.enable(msg.author.id).unwrap();
-    msg.reply(&ctx.http, "Enabled direct messages")?;
+    match data.lock().unwrap().users.enable(msg.author.id) {
+        Ok(_) => msg.reply(&ctx.http, "Enabled direct messages")?,
+        Err(e) => msg.reply(&ctx.http, format!("Error: {}", e))?,
+    };
     Ok(())
 }
 
@@ -128,16 +130,25 @@ fn enable(ctx: &mut Context, msg: &Message) -> CommandResult {
 fn disable(ctx: &mut Context, msg: &Message) -> CommandResult {
     let mut map = ctx.data.write();
     let data = map.get_mut::<Data>().unwrap();
-    data.lock().unwrap().users.disable(msg.author.id).unwrap();
+    match data.lock().unwrap().users.disable(msg.author.id) {
+        Ok(_) => msg.reply(&ctx.http, "Disabled direct messages")?,
+        Err(e) => msg.reply(&ctx.http, format!("Error: {}", e))?,
+    };
     Ok(())
 }
 
-/// Disables direct messages
+/// Disables direct messages and removes the configuration
 #[command]
 fn remove(ctx: &mut Context, msg: &Message) -> CommandResult {
     let mut map = ctx.data.write();
     let data = map.get_mut::<Data>().unwrap();
-    data.lock().unwrap().users.remove(msg.author.id).unwrap();
+    match data.lock().unwrap().users.remove(msg.author.id) {
+        Ok(_) => msg.reply(
+            &ctx.http,
+            "Disabled direct messages and removed configuration",
+        )?,
+        Err(e) => msg.reply(&ctx.http, format!("Error: {}", e))?,
+    };
     Ok(())
 }
 
@@ -152,7 +163,8 @@ fn set(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     let data = map.get_mut::<Data>().unwrap();
     match args.single::<String>().unwrap().as_str() {
         "send-before" => {
-            let duration = match args.single::<String>().unwrap().as_str() {
+            let arg = args.single::<String>().unwrap();
+            let duration = match arg.as_str() {
                 "off" => None,
                 v => match v.parse::<u64>() {
                     Ok(v) => Some(user::Duration { minutes: v }),
@@ -168,14 +180,19 @@ fn set(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
                     }
                 },
             };
-            data.lock()
+            match data
+                .lock()
                 .unwrap()
                 .users
                 .set_send_before(msg.author.id, duration)
-                .unwrap();
+            {
+                Ok(_) => msg.reply(&ctx.http, format!("Set `send-before` to `{}`", arg))?,
+                Err(e) => msg.reply(&ctx.http, format!("Error: {}", e))?,
+            };
         }
         "send-after-previous" => {
-            let enable = match args.single::<String>().unwrap().as_str() {
+            let arg = args.single::<String>().unwrap();
+            let enable = match arg.as_str() {
                 "off" => false,
                 "on" => true,
                 v => {
@@ -189,11 +206,15 @@ fn set(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
                     return Ok(());
                 }
             };
-            data.lock()
+            match data
+                .lock()
                 .unwrap()
                 .users
                 .set_send_after(msg.author.id, enable)
-                .unwrap();
+            {
+                Ok(_) => msg.reply(&ctx.http, format!("Set `send-after-previous` to `{}`", arg))?,
+                Err(e) => msg.reply(&ctx.http, format!("Error: {}", e))?,
+            };
         }
         v => {
             msg.reply(&ctx.http, format!("Error: Unknown subcommand `{}`", v))?;
@@ -229,7 +250,10 @@ fn get(ctx: &mut Context, msg: &Message) -> CommandResult {
             })?;
         }
         None => {
-            msg.reply(&ctx.http, "Error: User not found")?;
+            msg.reply(
+                &ctx.http,
+                "Error: User not found (DMs can be enabled with `@lsfbot dm enable`)",
+            )?;
         }
     };
     Ok(())
