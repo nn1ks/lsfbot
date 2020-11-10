@@ -21,6 +21,8 @@ mod modul;
 mod scraper;
 mod user;
 
+const SLEEP_SECS: u64 = 60;
+
 struct Data {
     module: Vec<Modul>,
     users: Users,
@@ -384,7 +386,8 @@ fn main() -> Result<()> {
                 .flat_map(|modul| {
                     modul.messages(|termin| {
                         let duration = termin.beginn.signed_duration_since(Utc::now());
-                        duration.num_minutes() > 25 && duration.num_minutes() < 30
+                        duration.num_seconds() > 30 * 60 - SLEEP_SECS as i64
+                            && duration.num_seconds() < 30 * 60
                     })
                 })
                 .collect::<Vec<_>>();
@@ -419,8 +422,8 @@ fn main() -> Result<()> {
                             let duration = termin.beginn.signed_duration_since(Utc::now());
                             match user.send_before.as_ref().map(|v| v.minutes) {
                                 Some(minutes) => {
-                                    duration.num_minutes() > minutes as i64 - 5
-                                        && duration.num_minutes() < minutes as i64
+                                    duration.num_seconds() > (minutes * 60 - SLEEP_SECS) as i64
+                                        && duration.num_seconds() < (minutes * 60) as i64
                                         && (modul.gruppe.is_none() || modul.gruppe == user.gruppe)
                                 }
                                 None => false,
@@ -475,7 +478,7 @@ fn main() -> Result<()> {
                         .map(|v| v.modul_termin.ende)
                         .find(|v| {
                             let duration = v.signed_duration_since(Utc::now());
-                            duration.num_minutes() > 0 && duration.num_minutes() < 5
+                            duration.num_seconds() > 0 && duration.num_seconds() < SLEEP_SECS as i64
                         });
                     let next_message = last.and_then(|last| {
                         messages_today
@@ -521,7 +524,7 @@ fn main() -> Result<()> {
             }
             log::debug!("Finished checks");
             drop(data_lock);
-            thread::sleep(Duration::from_secs(300));
+            thread::sleep(Duration::from_secs(SLEEP_SECS));
         }
     });
 
