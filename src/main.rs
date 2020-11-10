@@ -305,7 +305,8 @@ fn main() -> Result<()> {
                 message
             ))
         })
-        .level(log::LevelFilter::Info)
+        .level(log::LevelFilter::Warn)
+        .level_for("lsfbot", log::LevelFilter::Trace)
         .chain(io::stdout())
         .apply()?;
 
@@ -350,7 +351,7 @@ fn main() -> Result<()> {
     }
 
     let start_client_join_handle = thread::spawn(move || {
-        log::info!("Starting discord client");
+        log::debug!("Starting discord client");
         client.start()
     });
 
@@ -358,7 +359,7 @@ fn main() -> Result<()> {
     data.lock().unwrap().module = module;
 
     let reminder_join_handle = thread::spawn(move || {
-        log::info!("Checking for reminders");
+        log::debug!("Checking for reminders");
 
         let send_message =
             |message: &modul::MessageData, group: &config::Group| match ChannelId(group.channel_id)
@@ -372,9 +373,12 @@ fn main() -> Result<()> {
             };
 
         loop {
+            log::debug!("Starting loop for reminder messages");
             let mut data_lock = data.lock().unwrap();
             data_lock.users.refresh().unwrap();
             let module = &data_lock.module;
+
+            log::debug!("Checking messages for group channels");
             let mut messages = module
                 .iter()
                 .flat_map(|modul| {
@@ -399,11 +403,15 @@ fn main() -> Result<()> {
                     }
                 }
             }
+            log::debug!("Finished checking messages for group channels");
 
+            log::debug!("Checking for user messages");
             for user in data_lock.users.get_all() {
                 if !user.enabled {
+                    log::debug!("Skipping messages for user `{}` (disabled)", user.id);
                     continue;
                 }
+                log::debug!("Checking messages for user `{}`", user.id);
                 let messages = module
                     .iter()
                     .flat_map(|modul| {
@@ -420,12 +428,18 @@ fn main() -> Result<()> {
                         })
                     })
                     .collect::<Vec<_>>();
+                log::debug!("Finished checking for messages for user `{}`", user.id);
 
                 if !messages.is_empty() {
+                    log::debug!("Creating dm channel for user `{}`", user.id);
                     let channel = match user.id.create_dm_channel(&http_client) {
                         Ok(v) => v,
                         Err(e) => {
-                            log::error!("Failed to create dm channel: {}", e);
+                            log::error!(
+                                "Failed to create dm channel for user `{}`: {}",
+                                user.id,
+                                e
+                            );
                             continue;
                         }
                     };
@@ -442,6 +456,10 @@ fn main() -> Result<()> {
                 }
 
                 if user.send_after_previous {
+                    log::debug!(
+                        "Checking for `send-after-previous` message for user `{}`",
+                        user.id
+                    );
                     let messages_today = module
                         .iter()
                         .flat_map(|modul| {
@@ -466,10 +484,15 @@ fn main() -> Result<()> {
                             .min_by_key(|v| v.modul_termin.beginn)
                     });
                     if let Some(message) = next_message {
+                        log::debug!("Creating dm channel for user `{}`", user.id);
                         let channel = match user.id.create_dm_channel(&http_client) {
                             Ok(v) => v,
                             Err(e) => {
-                                log::error!("Failed to create dm channel: {}", e);
+                                log::error!(
+                                    "Failed to create dm channel for user `{}`: {}",
+                                    user.id,
+                                    e
+                                );
                                 continue;
                             }
                         };
@@ -494,7 +517,9 @@ fn main() -> Result<()> {
                         };
                     }
                 }
+                log::debug!("Finished checks for user `{}`", user.id);
             }
+            log::debug!("Finished checks");
             drop(data_lock);
             thread::sleep(Duration::from_secs(300));
         }

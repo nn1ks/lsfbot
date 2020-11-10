@@ -7,7 +7,7 @@ use scraper::{Html, Selector};
 use std::{thread, time::Duration};
 
 pub fn fetch_module(cfg: &Config) -> Result<Vec<Modul>> {
-    log::info!("Fetching data from website");
+    log::debug!("Fetching data from website");
     let client = Client::builder()
         .danger_accept_invalid_certs(true)
         .build()
@@ -167,6 +167,6 @@ pub fn fetch_module(cfg: &Config) -> Result<Vec<Modul>> {
         }
         thread::sleep(Duration::from_secs(2));
     }
-    log::info!("Successfully fetched data from website");
+    log::debug!("Successfully fetched data from website");
     Ok(module)
 }
