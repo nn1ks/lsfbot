@@ -87,20 +87,21 @@ impl Users {
             return Ok(&mut self.users_config.user[i]);
         }
         let user = user_id.to_user(&self.cache_and_http)?;
-        let user_has_role = |role_id: u64| {
-            user.has_role(
-                &self.cache_and_http,
-                self.app_config.discord.guild_id,
-                role_id,
-            )
+        let user_has_role = |role_id: u64| match user.has_role(
+            &self.cache_and_http,
+            self.app_config.discord.guild_id,
+            role_id,
+        ) {
+            Ok(v) => v,
+            Err(_) => false,
         };
-        let gruppe = if user_has_role(self.app_config.discord.gruppe_1.role_id)? {
+        let gruppe = if user_has_role(self.app_config.discord.gruppe_1.role_id) {
             Some(ModulGruppe::Gruppe1)
-        } else if user_has_role(self.app_config.discord.gruppe_2.role_id)? {
+        } else if user_has_role(self.app_config.discord.gruppe_2.role_id) {
             Some(ModulGruppe::Gruppe2)
-        } else if user_has_role(self.app_config.discord.gruppe_3.role_id)? {
+        } else if user_has_role(self.app_config.discord.gruppe_3.role_id) {
             Some(ModulGruppe::Gruppe3)
-        } else if user_has_role(self.app_config.discord.gruppe_4.role_id)? {
+        } else if user_has_role(self.app_config.discord.gruppe_4.role_id) {
             Some(ModulGruppe::Gruppe4)
         } else {
             None
@@ -160,6 +161,12 @@ impl Users {
     pub fn set_send_after(&mut self, user_id: UserId, value: bool) -> Result<()> {
         let user = self.get_mut_or_add(user_id)?;
         user.send_after_previous = value;
+        self.write()
+    }
+
+    pub fn set_group(&mut self, user_id: UserId, value: Option<ModulGruppe>) -> Result<()> {
+        let user = self.get_mut_or_add(user_id)?;
+        user.gruppe = value;
         self.write()
     }
 }

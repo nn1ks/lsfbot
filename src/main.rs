@@ -159,6 +159,7 @@ fn remove(ctx: &mut Context, msg: &Message) -> CommandResult {
 /// Available subcommands:
 /// - `send-before`: Takes either a number or `off` as value
 /// - `send-after-previous`: Takes either `on` or `off` as value
+/// - `group`: Takes either `1`, `2`, `3`, `4`, or `none` as value
 #[command]
 fn set(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     let mut map = ctx.data.write();
@@ -218,6 +219,26 @@ fn set(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
                 Err(e) => msg.reply(&ctx.http, format!("Error: {}", e))?,
             };
         }
+        "group" => {
+            let (arg, group) = match args.single::<String>().as_deref() {
+                Ok("1") => ("1", Some(ModulGruppe::Gruppe1)),
+                Ok("2") => ("2", Some(ModulGruppe::Gruppe2)),
+                Ok("3") => ("3", Some(ModulGruppe::Gruppe3)),
+                Ok("4") => ("4", Some(ModulGruppe::Gruppe4)),
+                Ok("none") => ("none", None),
+                Ok(_) | Err(_) => {
+                    msg.reply(
+                        &ctx.http,
+                        "Error: Invalid value (available values: `1`, `2`, `3`, `4`, `none`)",
+                    )?;
+                    return Ok(());
+                }
+            };
+            match data.lock().unwrap().users.set_group(msg.author.id, group) {
+                Ok(_) => msg.reply(&ctx.http, format!("Set `group` to `{}`", arg))?,
+                Err(e) => msg.reply(&ctx.http, format!("Error: {}", e))?,
+            };
+        }
         v => {
             msg.reply(&ctx.http, format!("Error: Unknown subcommand `{}`", v))?;
             return Ok(());
@@ -242,12 +263,17 @@ fn get(ctx: &mut Context, msg: &Message) -> CommandResult {
             } else {
                 "off"
             };
+            let group = match &user.gruppe {
+                Some(v) => v.to_string(),
+                None => "none".to_owned(),
+            };
             msg.channel_id.send_message(&ctx.http, |m| {
                 m.embed(|e| {
                     e.title("Configuration")
                         .field("enabled", user.enabled, false)
                         .field("send-before", send_before_fmt, false)
                         .field("send-after-previous", send_after_previous_fmt, false)
+                        .field("group", group, false)
                 })
             })?;
         }
