@@ -46,25 +46,40 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     let map = ctx.data.read();
     let config = map.get::<Config>().unwrap();
     let data = map.get::<Data>().unwrap();
-    let module = &data.lock().unwrap().module;
+    let data_lock = data.lock().unwrap();
+
+    let author_group = match data_lock.users.get(msg.author.id) {
+        Some(user) => user.gruppe.clone(),
+        None => {
+            let user_has_role = |role_id: u64| match msg.author.has_role(
+                &ctx.http,
+                config.discord.guild_id,
+                role_id,
+            ) {
+                Ok(v) => v,
+                Err(_) => false,
+            };
+            if user_has_role(config.discord.gruppe_1.role_id) {
+                Some(ModulGruppe::Gruppe1)
+            } else if user_has_role(config.discord.gruppe_2.role_id) {
+                Some(ModulGruppe::Gruppe2)
+            } else if user_has_role(config.discord.gruppe_3.role_id) {
+                Some(ModulGruppe::Gruppe3)
+            } else if user_has_role(config.discord.gruppe_4.role_id) {
+                Some(ModulGruppe::Gruppe4)
+            } else {
+                None
+            }
+        }
+    };
 
     let get_messages = |filter: Box<dyn Fn(&ModulTermin) -> bool>| {
-        module
+        data_lock
+            .module
             .iter()
             .flat_map(|modul| modul.messages(|termin| filter(termin)))
             .filter(|message| {
-                let author_has_role = |role_id: u64| {
-                    msg.author
-                        .has_role(&ctx.http, config.discord.guild_id, role_id)
-                        .unwrap()
-                };
-                match message.modul.gruppe {
-                    Some(ModulGruppe::Gruppe1) => author_has_role(config.discord.gruppe_1.role_id),
-                    Some(ModulGruppe::Gruppe2) => author_has_role(config.discord.gruppe_2.role_id),
-                    Some(ModulGruppe::Gruppe3) => author_has_role(config.discord.gruppe_3.role_id),
-                    Some(ModulGruppe::Gruppe4) => author_has_role(config.discord.gruppe_4.role_id),
-                    None => true,
-                }
+                message.modul.gruppe.is_none() || message.modul.gruppe == author_group
             })
             .collect::<Vec<_>>()
     };
@@ -96,7 +111,7 @@ fn list(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
             for _ in 0..7 {
                 let date2 = date;
                 messages.extend(get_messages(Box::new(move |termin| {
-                    termin.beginn.date() == date2 && termin.beginn > Utc::now()
+                    termin.beginn.date() == date2 && termin.ende > Utc::now()
                 })));
                 if !messages.is_empty() {
                     break;
