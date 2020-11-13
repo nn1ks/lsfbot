@@ -415,7 +415,9 @@ fn main() -> Result<()> {
                 Err(e) => log::error!("Failed to send reminder message: {}", e),
             };
 
+        let mut delay = chrono::Duration::zero();
         loop {
+            let start = Utc::now();
             log::debug!("Starting loop for reminder messages");
             let mut data_lock = data.lock().unwrap();
             data_lock.users.refresh().unwrap();
@@ -427,7 +429,7 @@ fn main() -> Result<()> {
                 .flat_map(|modul| {
                     modul.messages(|termin| {
                         let duration = termin.beginn.signed_duration_since(Utc::now());
-                        duration.num_seconds() > 30 * 60 - SLEEP_SECS as i64
+                        duration.num_seconds() > 30 * 60 - SLEEP_SECS as i64 - delay.num_seconds()
                             && duration.num_seconds() < 30 * 60
                     })
                 })
@@ -463,7 +465,8 @@ fn main() -> Result<()> {
                             let duration = termin.beginn.signed_duration_since(Utc::now());
                             match user.send_before.as_ref().map(|v| v.minutes) {
                                 Some(minutes) => {
-                                    duration.num_seconds() > (minutes * 60 - SLEEP_SECS) as i64
+                                    duration.num_seconds()
+                                        > (minutes * 60 - SLEEP_SECS) as i64 - delay.num_seconds()
                                         && duration.num_seconds() < (minutes * 60) as i64
                                         && (modul.gruppe.is_none() || modul.gruppe == user.gruppe)
                                 }
@@ -519,7 +522,8 @@ fn main() -> Result<()> {
                         .map(|v| v.modul_termin.ende)
                         .find(|v| {
                             let duration = v.signed_duration_since(Utc::now());
-                            duration.num_seconds() > 0 && duration.num_seconds() < SLEEP_SECS as i64
+                            duration.num_seconds() > 0
+                                && duration.num_seconds() < SLEEP_SECS as i64 + delay.num_seconds()
                         });
                     let next_message = last.and_then(|last| {
                         messages_today
@@ -565,6 +569,7 @@ fn main() -> Result<()> {
             }
             log::debug!("Finished checks");
             drop(data_lock);
+            delay = Utc::now().signed_duration_since(start);
             thread::sleep(Duration::from_secs(SLEEP_SECS));
         }
     });
